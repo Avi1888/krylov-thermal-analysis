@@ -30,6 +30,7 @@ class SolverResult:
     solve_time: float
     preconditioner_setup_time: float = 0.0
     message: str = ""
+    validation_time: float = 0.0
 
 
 def _validate_system(A: Any, b: Any, tol: float) -> tuple[Any, np.ndarray]:
@@ -56,7 +57,7 @@ def _validate_system(A: Any, b: Any, tol: float) -> tuple[Any, np.ndarray]:
         raise ValueError("b must be a one-dimensional vector matching A.")
     if not np.all(np.isfinite(rhs)):
         raise ValueError("b contains non-finite values.")
-    if asymmetry > tol * scale:
+    if asymmetry > 1e-10 * scale:
         raise ValueError("CG and PCG require a symmetric matrix; A failed the symmetry check.")
     return matrix, rhs
 
@@ -145,10 +146,12 @@ def solve_cg(
     requirement (or indicates severe numerical breakdown).
     """
     _validate_options(tol, max_iter)
+    validation_started = perf_counter()
     matrix, rhs = _validate_system(A, b, tol)
     if check_spd:
-        validate_spd(matrix, symmetry_tol=tol)
+        validate_spd(matrix, symmetry_tol=1e-10)
     solution = _initial_solution(rhs.size, x0)
+    validation_time = perf_counter() - validation_started
     solve_started = perf_counter()
     residual = rhs - _matvec(matrix, solution)
     rhs_scale = max(float(np.linalg.norm(rhs)), 1.0)
@@ -157,7 +160,9 @@ def solve_cg(
     history = [residual_norm]
     if residual_norm <= threshold:
         return SolverResult(solution, 0, True, history, residual_norm,
-                            perf_counter() - solve_started, message="Initial guess satisfies tolerance.")
+                            perf_counter() - solve_started,
+                            message="Initial guess satisfies tolerance.",
+                            validation_time=validation_time)
 
     direction = residual.copy()
     residual_sq = float(residual @ residual)
@@ -175,7 +180,8 @@ def solve_cg(
             raise FloatingPointError("CG residual became non-finite.")
         if residual_norm <= threshold:
             return SolverResult(solution, iteration, True, history, residual_norm,
-                                perf_counter() - solve_started, message="Converged.")
+                                perf_counter() - solve_started, message="Converged.",
+                                validation_time=validation_time)
         next_residual_sq = float(residual @ residual)
         if residual_sq == 0 or not np.isfinite(next_residual_sq):
             raise FloatingPointError("CG encountered numerical breakdown.")
@@ -183,7 +189,9 @@ def solve_cg(
         residual_sq = next_residual_sq
 
     return SolverResult(solution, int(max_iter), False, history, residual_norm,
-                        perf_counter() - solve_started, message="Maximum iterations reached.")
+                        perf_counter() - solve_started,
+                        message="Maximum iterations reached.",
+                        validation_time=validation_time)
 
 
 def solve_pcg(
@@ -202,9 +210,10 @@ def solve_pcg(
     use; its original build time is not charged again for this solve.
     """
     _validate_options(tol, max_iter)
+    validation_started = perf_counter()
     matrix, rhs = _validate_system(A, b, tol)
     if check_spd:
-        validate_spd(matrix, symmetry_tol=tol)
+        validate_spd(matrix, symmetry_tol=1e-10)
     if preconditioner is None:
         preconditioner = build_jacobi_preconditioner(matrix)
         setup_time = preconditioner.setup_time
@@ -213,6 +222,7 @@ def solve_pcg(
         setup_time = 0.0
 
     solution = _initial_solution(rhs.size, x0)
+    validation_time = max(0.0, perf_counter() - validation_started - setup_time)
     solve_started = perf_counter()
     residual = rhs - _matvec(matrix, solution)
     rhs_scale = max(float(np.linalg.norm(rhs)), 1.0)
@@ -222,7 +232,7 @@ def solve_pcg(
     if residual_norm <= threshold:
         return SolverResult(solution, 0, True, history, residual_norm,
                             perf_counter() - solve_started, setup_time,
-                            "Initial guess satisfies tolerance.")
+                            "Initial guess satisfies tolerance.", validation_time)
 
     z = preconditioner.apply(residual)
     residual_preconditioned = float(residual @ z)
@@ -244,7 +254,8 @@ def solve_pcg(
             raise FloatingPointError("PCG residual became non-finite.")
         if residual_norm <= threshold:
             return SolverResult(solution, iteration, True, history, residual_norm,
-                                perf_counter() - solve_started, setup_time, "Converged.")
+                                perf_counter() - solve_started, setup_time, "Converged.",
+                                validation_time)
 
         z = preconditioner.apply(residual)
         next_residual_preconditioned = float(residual @ z)
@@ -255,4 +266,5 @@ def solve_pcg(
         residual_preconditioned = next_residual_preconditioned
 
     return SolverResult(solution, int(max_iter), False, history, residual_norm,
-                        perf_counter() - solve_started, setup_time, "Maximum iterations reached.")
+                        perf_counter() - solve_started, setup_time,
+                        "Maximum iterations reached.", validation_time)

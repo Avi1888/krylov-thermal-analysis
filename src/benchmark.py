@@ -8,8 +8,11 @@ from typing import Any
 
 import numpy as np
 
-from .krylov_solvers import SolverResult, solve_cg, solve_pcg
-from .repeated_solve import RepeatedSolveResult, compare_four_configurations
+from .krylov_solvers import SolverResult, solve_cg, solve_pcg, validate_spd
+from .repeated_solve import (
+    RepeatedSolveResult,
+    compare_four_configurations,
+)
 
 
 def benchmark_cg_vs_pcg(
@@ -22,6 +25,9 @@ def benchmark_cg_vs_pcg(
     reference_solution: Any | None = None,
 ) -> dict[str, Any]:
     """Run CG and Jacobi-PCG and return comparable diagnostics."""
+    # Warm up the linear-algebra backend outside the per-solver timings so
+    # first-call library initialization does not favor whichever solver runs second.
+    validate_spd(A)
     cg = solve_cg(A, b, x0=x0, tol=tol, max_iter=max_iter)
     pcg = solve_pcg(A, b, x0=x0, tol=tol, max_iter=max_iter)
     reference = None if reference_solution is None else np.asarray(reference_solution, dtype=float)
@@ -33,7 +39,9 @@ def benchmark_cg_vs_pcg(
             "final_residual": result.final_residual,
             "solver_time": result.solve_time,
             "preconditioner_setup_time": result.preconditioner_setup_time,
-            "total_time": result.solve_time + result.preconditioner_setup_time,
+            "validation_time": result.validation_time,
+            "total_time": (result.solve_time + result.preconditioner_setup_time
+                           + result.validation_time),
         }
         if reference is not None:
             if reference.shape != result.solution.shape:
@@ -67,6 +75,7 @@ def repeated_solve_summary(results: dict[str, RepeatedSolveResult]) -> list[dict
             "total_iterations": result.total_iterations,
             "solver_time_seconds": result.total_solver_time,
             "preconditioner_setup_seconds": result.total_preconditioner_setup_time,
+            "validation_seconds": result.total_validation_time,
             "total_time_seconds": result.total_time,
             "final_residual": result.final_residual,
         })
@@ -143,6 +152,35 @@ def plot_workload_sequence(sequence: Any, path: str | Path | None = None):
     axis.set_yticks(range(3), labels=states)
     axis.set(xlabel="Observation index", ylabel="Workload state", title="Workload-state sequence")
     axis.grid(True, axis="x", alpha=0.25)
+    figure.tight_layout()
+    if path is not None:
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        figure.savefig(destination, dpi=160)
+    return figure
+
+
+def plot_repeated_solve_comparison(
+    results: dict[str, RepeatedSolveResult],
+    path: str | Path | None = None,
+):
+    """Compare iterations, preconditioner setup, and total time for A-D."""
+    import matplotlib.pyplot as plt
+
+    labels = list(results)
+    summaries = repeated_solve_summary(results)
+    by_label = {row["configuration"]: row for row in summaries}
+    metrics = (
+        ("total_iterations", "Total iterations"),
+        ("preconditioner_setup_seconds", "Preconditioner setup time (s)"),
+        ("total_time_seconds", "Solver + setup + validation time (s)"),
+    )
+    figure, axes = plt.subplots(1, len(metrics), figsize=(12, 3.8))
+    for axis, (key, title) in zip(axes, metrics):
+        axis.bar(labels, [by_label[label][key] for label in labels], color="#4C78A8")
+        axis.set_title(title)
+        axis.set_xlabel("Configuration")
+        axis.grid(True, axis="y", alpha=0.25)
     figure.tight_layout()
     if path is not None:
         destination = Path(path)

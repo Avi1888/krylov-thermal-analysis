@@ -41,6 +41,8 @@ def inspect_thermal_dataset(data_or_path: dict[str, Any] | str | Path) -> dict[s
             if isinstance(data_or_path, (str, Path)) else data_or_path)
     if not isinstance(data, dict) or not {"input", "output"}.issubset(data):
         raise ValueError("Expected a dictionary with 'input' and 'output' arrays.")
+    inputs = np.asarray(data["input"])
+    outputs = np.asarray(data["output"])
     report: dict[str, Any] = {"keys": list(data.keys()), "arrays": {}}
     for name in ("input", "output"):
         values = np.asarray(data[name])
@@ -57,8 +59,31 @@ def inspect_thermal_dataset(data_or_path: dict[str, Any] | str | Path) -> dict[s
             stats.update(min=float(finite_values.min()), max=float(finite_values.max()),
                          mean=float(finite_values.mean()), std=float(finite_values.std()))
         report["arrays"][name] = stats
-    inputs = np.asarray(data["input"])
-    outputs = np.asarray(data["output"])
+    if inputs.ndim == 3:
+        report["input_layout"] = {
+            "samples": int(inputs.shape[0]),
+            "sequence_length": int(inputs.shape[1]),
+            "feature_count": int(inputs.shape[2]),
+        }
+        feature_stats = []
+        for index in range(inputs.shape[2]):
+            feature = np.asarray(inputs[..., index], dtype=float)
+            finite_values = feature[np.isfinite(feature)]
+            feature_stats.append({
+                "metric_index": index,
+                "finite_count": int(finite_values.size),
+                "invalid_count": int(feature.size - finite_values.size),
+                "min": float(finite_values.min()) if finite_values.size else None,
+                "max": float(finite_values.max()) if finite_values.size else None,
+                "mean": float(finite_values.mean()) if finite_values.size else None,
+                "std": float(finite_values.std()) if finite_values.size else None,
+            })
+        report["feature_statistics"] = feature_stats
+    elif inputs.ndim == 2:
+        report["input_layout"] = {
+            "samples": int(inputs.shape[0]),
+            "feature_count": int(inputs.shape[1]),
+        }
     report["sample_counts_match"] = bool(inputs.shape[0] == outputs.shape[0])
     report["input_has_sequence_axis"] = bool(inputs.ndim == 3)
     report["output_is_thermal_map_shaped"] = bool(outputs.ndim == 3)
@@ -155,6 +180,7 @@ def make_spatial_heat_source(
     if len(grid_shape) != 2 or any(isinstance(size, bool) or int(size) != size or size <= 0
                                   for size in grid_shape):
         raise ValueError("grid_shape must contain two positive integers.")
+    grid_shape = tuple(int(size) for size in grid_shape)
     intensity = map_workload_to_heat_intensity(state, heat_levels)
     if spatial_weights is None:
         weights = np.full(grid_shape, 1.0 / (grid_shape[0] * grid_shape[1]), dtype=float)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Sequence
 
 import numpy as np
 from scipy import sparse
 
-from .krylov_solvers import SolverResult, solve_pcg
+from .krylov_solvers import SolverResult, solve_pcg, validate_spd
 from .preconditioners import (
     JacobiPreconditioner,
     build_jacobi_preconditioner,
@@ -44,8 +45,13 @@ class RepeatedSolveResult:
         return sum(record.result.preconditioner_setup_time for record in self.records)
 
     @property
+    def total_validation_time(self) -> float:
+        return sum(record.result.validation_time for record in self.records)
+
+    @property
     def total_time(self) -> float:
-        return self.total_solver_time + self.total_preconditioner_setup_time
+        return (self.total_solver_time + self.total_preconditioner_setup_time
+                + self.total_validation_time)
 
     @property
     def final_residual(self) -> float:
@@ -72,7 +78,12 @@ def _expand_rhs(rhs_sequence: Any) -> list[np.ndarray]:
         if rhs_sequence.ndim == 2:
             return [row.astype(float, copy=False) for row in rhs_sequence]
         raise ValueError("RHS input must be a vector, a 2D array of rows, or a sequence of vectors.")
-    result = [np.asarray(rhs, dtype=float) for rhs in rhs_sequence]
+    values = list(rhs_sequence)
+    if not values:
+        return []
+    if all(np.isscalar(value) for value in values):
+        return [np.asarray(values, dtype=float)]
+    result = [np.asarray(rhs, dtype=float) for rhs in values]
     if any(rhs.ndim != 1 for rhs in result):
         raise ValueError("Each RHS must be a one-dimensional vector.")
     return result
@@ -108,6 +119,7 @@ def run_repeated_solve(
     validated_matrix_signature: str | None = None
 
     for step, (matrix, rhs) in enumerate(zip(matrix_sequence, right_hand_sides)):
+        preparation_started = perf_counter()
         signature = matrix_fingerprint(matrix)
         check_spd = signature != validated_matrix_signature
         guess = previous_solution if warm_start else None
@@ -124,16 +136,17 @@ def run_repeated_solve(
                     cached_preconditioner = build_jacobi_preconditioner(matrix)
                     matrix_changed = True
                     rebuilt = True
-            result = solve_pcg(matrix, rhs, x0=guess, preconditioner=cached_preconditioner,
-                               tol=tol, max_iter=max_iter, check_spd=check_spd)
-            if rebuilt:
-                result.preconditioner_setup_time = cached_preconditioner.setup_time
         else:
             cached_preconditioner = build_jacobi_preconditioner(matrix)
             rebuilt = True
-            result = solve_pcg(matrix, rhs, x0=guess, preconditioner=cached_preconditioner,
-                               tol=tol, max_iter=max_iter, check_spd=check_spd)
-            result.preconditioner_setup_time = cached_preconditioner.setup_time
+
+        setup_time = cached_preconditioner.setup_time if rebuilt else 0.0
+        preparation_time = perf_counter() - preparation_started
+        result = solve_pcg(matrix, rhs, x0=guess, preconditioner=cached_preconditioner,
+                           tol=tol, max_iter=max_iter, check_spd=check_spd)
+        if rebuilt:
+            result.preconditioner_setup_time = setup_time
+        result.validation_time += max(0.0, preparation_time - setup_time)
 
         records.append(StepSolveRecord(step, result, rebuilt, matrix_changed))
         validated_matrix_signature = signature
@@ -152,6 +165,14 @@ def compare_four_configurations(
     """Run A-D from the brief: cold/rebuilt, cold/reused, warm/rebuilt, warm/reused."""
     right_hand_sides = _expand_rhs(rhs_sequence)
     matrix_sequence = _expand_matrices(matrices, len(right_hand_sides))
+    # Preflight every distinct matrix once before timing any configuration so
+    # BLAS/eigensolver first-call initialization does not skew configuration A.
+    checked_signatures: set[str] = set()
+    for matrix in matrix_sequence:
+        signature = matrix_fingerprint(matrix)
+        if signature not in checked_signatures:
+            validate_spd(matrix)
+            checked_signatures.add(signature)
     return {
         "A": run_repeated_solve(matrix_sequence, right_hand_sides, warm_start=False,
                                 reuse_preconditioner=False, tol=tol, max_iter=max_iter),
