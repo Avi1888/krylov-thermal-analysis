@@ -5,7 +5,7 @@ from src.sparse_assembly import assemble_system
 
 
 def test_matrix_shape_symmetry_and_positive_definiteness():
-    grid = create_chip_grid(5, 6, power_density=50000)
+    grid = create_chip_grid(5, 6, die_width=0.012, die_height=0.01, power_density=50000)
     A, b = assemble_system(grid, parameters=ChipParameters())
     assert A.shape == (30, 30)
     assert b.shape == (30,)

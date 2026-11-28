@@ -1,0 +1,2 @@
+steps,solver,converged_steps,total_iterations,solver_time_seconds,preconditioner_setup_seconds,validation_time_seconds,total_time_seconds,maximum_true_residual,maximum_temperature_k,average_temperature_k,minimum_temperature_k
+32,PCG,32,100,0.02458990050945431,0.0006620000349357724,0.0812166997930035,0.10646860033739358,16945.081491248835,300.2768174144969,300.09874498779834,300.03991814297393

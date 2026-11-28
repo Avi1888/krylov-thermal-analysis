@@ -10,6 +10,7 @@ def main():
     output = Path("results")
     output.mkdir(exist_ok=True)
     rows = cols = 31
+    die_width = die_height = 0.01
     parameters = ChipParameters(
         material=ChipMaterial(density=2330, specific_heat=700, conductivity=130),
         die_thickness=0.0005, dt=1e-4, sink_temperature=300,
@@ -20,10 +21,11 @@ def main():
     one_region = make_power_map(rows, cols, background=8000, hot_regions=[
         {"row_start": 9, "row_end": 20, "col_start": 10, "col_end": 21, "power_density": 70000}
     ])
-    grid = create_chip_grid(rows, cols, initial_temperature=300, power_density=one_region)
+    grid = create_chip_grid(rows, cols, die_width=die_width, die_height=die_height,
+                            initial_temperature=300, power_density=one_region)
     history = run_thermal_simulation(grid, parameters, 100)
     plot_chip_heatmap(history[-1], output / "one_hot_region.png",
-                      "Chip temperature: one active region")
+                      "Chip temperature: one active region", die_width, die_height)
     plot_temperature_trends(history, parameters.dt, output / "one_region_trend.png")
     np.save(output / "one_region_history.npy", history)
 
@@ -32,10 +34,11 @@ def main():
         {"row_start": 5, "row_end": 13, "col_start": 5, "col_end": 14, "power_density": 80000},
         {"row_start": 18, "row_end": 26, "col_start": 18, "col_end": 27, "power_density": 50000}
     ])
-    grid = create_chip_grid(rows, cols, initial_temperature=300, power_density=multiple)
+    grid = create_chip_grid(rows, cols, die_width=die_width, die_height=die_height,
+                            initial_temperature=300, power_density=multiple)
     history = run_thermal_simulation(grid, parameters, 100)
     plot_chip_heatmap(history[-1], output / "multiple_hot_regions.png",
-                      "Chip temperature: multiple active regions")
+                      "Chip temperature: multiple active regions", die_width, die_height)
     plot_temperature_trends(history, parameters.dt, output / "multiple_regions_trend.png")
     np.save(output / "multiple_regions_history.npy", history)
 
@@ -43,13 +46,14 @@ def main():
     low = np.full((rows, cols), 10000.0)
     medium = np.full((rows, cols), 30000.0)
     high = np.full((rows, cols), 60000.0)
-    grid = create_chip_grid(rows, cols, initial_temperature=300)
+    grid = create_chip_grid(rows, cols, die_width=die_width, die_height=die_height,
+                            initial_temperature=300)
     history = run_thermal_simulation(
         grid, parameters, 90,
         power_schedule=[low] * 30 + [medium] * 30 + [high] * 30
     )
     plot_chip_heatmap(history[-1], output / "changing_workload_final.png",
-                      "Chip temperature after changing workload")
+                      "Chip temperature after changing workload", die_width, die_height)
     plot_temperature_trends(history, parameters.dt, output / "changing_workload_trend.png")
     np.save(output / "changing_workload_history.npy", history)
 

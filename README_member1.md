@@ -9,7 +9,7 @@ Simulation Using Krylov Subspace Methods and Markov Chain Modelling**.
 - Initial temperature and material properties.
 - Explicitly documented boundary assumptions.
 - Transient heat-conduction model.
-- Backward-Euler time discretisation and finite-difference spatial discretisation.
+- Backward-Euler time discretisation and cell-centred finite-volume spatial discretisation.
 - Sparse matrix `A` and right-hand-side vector `b`.
 - Matrix dimension, symmetry and positive-definiteness tests.
 - CG residual test and analytic uniform-equilibrium validation.
@@ -35,15 +35,33 @@ vertical path for heat removal:
 - `T_sink`: package/cooling reference temperature, K
 - `p_surface`: generated power per die surface area, W/m^2
 
-The four lateral die edges are insulated (zero normal heat flux). Heat
-transfer into the package/cooling path is approximated using the effective
-vertical term. This is a reduced 2D educational model, not a full 3D
-transistor/die/package/heatsink simulation.
+The 2D array is a uniform, cell-centred finite-volume grid. For a die of width
+`W`, height `H`, and `cols × rows` cells, `dx = W/cols` and `dy = H/rows`;
+cell-centre coordinates are `(c + 1/2) dx` and `(r + 1/2) dy`. Temperature,
+power and solver vectors retain their existing array shapes and row-major
+flattening order. The four lateral die edges are insulated (zero normal heat
+flux); the boundary face flux is zero and no conductance to an outside cell is
+assembled. Heat transfer into the package/cooling path is approximated using
+the effective vertical term. This is a reduced 2D educational model, not a full
+3D transistor/die/package/heatsink simulation.
 
-Backward Euler is used in time. The spatial Laplacian is discretised using
-a symmetric nearest-neighbour finite-difference stencil. The resulting
-matrix is symmetric positive definite for positive material properties,
-positive time step and nonnegative effective cooling coefficient.
+Backward Euler is used in time. Integrating over a cell of area
+`Ac = dx*dy` and thickness `t_die` gives, for each cell `i`,
+
+```text
+(rho*cp*t_die*Ac/dt + h_eff*Ac + sum(Gij))*T_i(new)
+    - sum(Gij*T_j(new))
+  = rho*cp*t_die*Ac/dt*T_i(old) + h_eff*Ac*T_sink + p_i*Ac
+```
+
+The in-plane face conductances are `Gx = k*t_die*dy/dx` and
+`Gy = k*t_die*dx/dy`. Dividing each cell equation by `t_die*Ac` yields the
+assembled per-volume coefficients: capacity `rho*cp/dt`, cooling `h_eff/t_die`,
+source `p/t_die`, and neighbor weights `k/dx^2` or `k/dy^2`. This symmetric
+finite-volume graph Laplacian has zero row sum before capacity/cooling are
+added, including at insulated edges and corners. With finite positive density,
+heat capacity, conductivity, thickness and time step, plus nonnegative cooling,
+the capacity term makes the matrix symmetric positive definite.
 
 ## 3. Interface for Member 2
 
@@ -89,6 +107,11 @@ not represent measured Ryzen 7 4800U core locations or power values.
 ## 5. Numerical validation
 
 Tests check:
+- Cell-centre spacing and coordinates.
+- Interior, edge and corner finite-volume stencils.
+- Zero-flux boundary row sums, matrix symmetry and positive definiteness.
+- Uniform-source analytical transient behavior across grid refinements.
+- Finite-value validation for model parameters and power inputs.
 - Matrix shape and symmetry.
 - Positive definiteness on a small grid.
 - Compatibility with the documented Member 2 assembly call.

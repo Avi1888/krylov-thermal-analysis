@@ -1,0 +1,25 @@
+{
+  "dataset_used": false,
+  "diagonal_max": 64.8,
+  "diagonal_min": 1.0125,
+  "execution_order": "CG then PCG on even repetitions; PCG then CG on odd repetitions",
+  "experiment": "synthetic CG vs Jacobi-PCG",
+  "grid_is_thermal_grid": false,
+  "grid_side": 20,
+  "initial_guess": "zero vector for both solvers",
+  "matrix": "A = S K S, where K = kron(I,T) + kron(T,I) + 0.05 I; T is the 1D Dirichlet tridiagonal matrix with diagonal 2 and off-diagonal -1; S=diag(s), s=0.5 + 3.5*(0.65*x + 0.35*y), with x,y coordinates on linspace(0,1,grid_side)",
+  "matrix_density_fraction": 0.012,
+  "matrix_dimension": 400,
+  "matrix_nonzero_count": 1920,
+  "matrix_shape": [
+    400,
+    400
+  ],
+  "max_iterations": 4000,
+  "repetitions": 20,
+  "rhs_generation": "seeded standard-normal exact solution x_star; b=A@x_star",
+  "same_matrix_rhs_initial_guess_and_tolerance": true,
+  "seed": 20261128,
+  "synthetic": true,
+  "tolerance": 1e-09
+}

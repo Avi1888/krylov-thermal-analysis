@@ -4,11 +4,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_chip_heatmap(temperature, output_path=None, title="Processor chip temperature"):
+def plot_chip_heatmap(temperature, output_path=None, title="Processor chip temperature",
+                      die_width=None, die_height=None):
+    """Plot cell-centred temperatures, optionally spanning physical die extents.
+
+    When physical dimensions are omitted, axes show cell-centre indices.
+    """
     fig, ax = plt.subplots()
-    image = ax.imshow(np.asarray(temperature) - 273.15, origin="lower",
+    values = np.asarray(temperature) - 273.15
+    extent = None
+    if die_width is not None or die_height is not None:
+        if (die_width is None or die_height is None
+                or not np.isfinite(die_width) or not np.isfinite(die_height)
+                or die_width <= 0 or die_height <= 0):
+            raise ValueError("die_width and die_height must both be finite and positive.")
+        extent = (0.0, float(die_width), 0.0, float(die_height))
+    image = ax.imshow(values, origin="lower", extent=extent,
                       cmap="inferno", aspect="equal")
-    ax.set(title=title, xlabel="Chip grid column", ylabel="Chip grid row")
+    if extent is None:
+        ax.set(title=title, xlabel="Chip grid column", ylabel="Chip grid row")
+    else:
+        ax.set(title=title, xlabel="Chip x position (m)", ylabel="Chip y position (m)")
     fig.colorbar(image, ax=ax, label="Temperature (°C)")
     fig.tight_layout()
     if output_path:
