@@ -34,7 +34,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--assume-chronological-sample-order", action="store_true",
-        help="Confirm that the outer sample dimension is chronological before estimating transitions.",
+        help="Acknowledge the verified relative order of the overlapping Ryzen windows.",
     )
     parser.add_argument("--steps", type=int, default=100)
     parser.add_argument("--seed", type=int, default=2026)
@@ -46,8 +46,9 @@ def main() -> None:
     args = parser.parse_args()
     if not args.assume_chronological_sample_order:
         parser.error(
-            "The dataset documentation does not establish outer sample chronology; "
-            "confirm it with --assume-chronological-sample-order before estimating transitions."
+            "Adjacent Ryzen input windows establish relative sample order; pass "
+            "--assume-chronological-sample-order to acknowledge it. This does not "
+            "validate the selected telemetry feature's meaning."
         )
     if args.steps < 0:
         parser.error("--steps must be non-negative")

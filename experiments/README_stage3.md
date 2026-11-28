@@ -1,12 +1,14 @@
 # Stage 3 experiments
 
 These experiment workflows keep synthetic software/performance checks separate
-from optional real-dataset analysis. Synthetic outputs are written under
-`results/synthetic/`; the guarded Ryzen dataset workflow defaults to
-`results/real_dataset/`. The root README integration is complete and combines
-both members' project guidance; `README_member1.md` retains the detailed
-thermal formulation, and this file retains the Stage 3 experiment methodology
-and output details.
+from real-dataset thermal-map analysis. Synthetic outputs are written under
+`results/synthetic/`; measured Ryzen map-analysis outputs are written under
+`results/ryzen_measured/`. The legacy telemetry-sequence workflow defaults to
+`results/real_dataset/` and remains exploratory because its selected feature
+meaning and units are unavailable. The root README integration is complete and
+combines both members' project guidance; `README_member1.md` retains the detailed thermal
+formulation, and this file retains the Stage 3 experiment methodology and
+output details.
 
 ## Run the experiments
 
@@ -66,22 +68,30 @@ heatmaps, maximum/average temperature trends, raw per-step diagnostics, and a
 NumPy temperature history.
 
 The source scale and Low/Medium/High intensity levels are illustrative inputs,
-not measured Ryzen 7 4800U power. No synthetic state sequence establishes
-dataset feature meaning or chronology. The optional real-dataset command is:
+not measured Ryzen 7 4800U power. No synthetic state sequence substitutes for
+measured dataset telemetry. The thermal configuration JSON records grid and die
+dimensions, cell spacing, duration, timestep, material properties, die
+thickness, cooling coefficient, sink and initial temperatures, source scale,
+and intensity levels. The model state and raw thermal history are in Kelvin;
+temperature plots convert to Celsius using `T_C = T_K - 273.15`.
 
-The thermal configuration JSON records grid and die dimensions, cell spacing,
-duration, timestep, material properties, die thickness, cooling coefficient,
-sink and initial temperatures, source scale and intensity levels. The model
-state and raw thermal history are in Kelvin; temperature plots convert to
-Celsius using `T_C = T_K - 273.15`.
+The optional legacy telemetry command is:
+
 
 ```bash
 python -m experiments.run_workload_sequence --metric-index INDEX --assume-chronological-sample-order
 ```
 
-Run that command only after independently establishing the selected feature's
-meaning and the sample chronology. The chronology flag records the caller's
-assumption; it does not verify that assumption.
+Relative chronology is established by the stride-one overlap between adjacent
+input windows. However, the 158 feature names and units remain unavailable, so
+the command's selected column cannot currently be assigned a physical meaning
+or treated as a named workload, power, frequency, or utilization measure. The
+legacy chronology flag acknowledges the verified relative order; it does not
+validate the selected feature.
+
+The measured thermal-map analysis uses the actual Celsius-valued output maps
+and does not use telemetry columns or drive the FVM. See the root README section
+**Ryzen 7 4800U Measured Thermal-Map Analysis** for its command and outputs.
 
 ## Outputs
 

@@ -88,7 +88,7 @@ def inspect_thermal_dataset(data_or_path: dict[str, Any] | str | Path) -> dict[s
     report["input_has_sequence_axis"] = bool(inputs.ndim == 3)
     report["output_is_thermal_map_shaped"] = bool(outputs.ndim == 3)
     report["chronology_note"] = (
-        "Array order is preserved, but chronology must be confirmed from dataset metadata."
+        "This generic inspector preserves array order but does not independently verify chronological order."
     )
     return report
 

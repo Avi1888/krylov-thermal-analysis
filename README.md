@@ -74,12 +74,14 @@ calibrated.
 
 `data/raw/CPU_R7_4800U.pkl` is the supplied dataset. Its arrays have input shape
 `(100, 100, 158)` and output shape `(100, 223, 280)`. The input metric names
-and metric-to-meaning mapping are unavailable, and the file documentation does
-not establish chronological order of the outer samples. Therefore metric
-selection and chronology must be explicitly reviewed; code must not infer
-utilization, power, or time ordering from array shape or values. Dataset output
-maps are measured temperatures in Celsius, not power maps; comparing them with
-the thermal model requires explicit spatial resampling and unit conversion.
+and metric-to-meaning mapping are unavailable. Adjacent input windows overlap
+by 99 telemetry frames, establishing relative stored order across 199 unique
+frames, but no absolute timestamps or sampling interval are available. Code
+must not infer utilization, power, or frequency from an unidentified metric
+index. Dataset output maps are measured temperatures in Celsius, not power
+maps; comparing their spatial distributions quantitatively with the thermal
+model requires physical map registration and compatible measurement
+conditions.
 Synthetic workloads and heat intensities are not measured Ryzen 7 4800U
 behavior or calibrated processor power.
 The dataset source documentation and research paper are available from the
@@ -92,14 +94,62 @@ To inspect the supplied dataset and produce per-metric descriptive statistics:
 python -m experiments.inspect_dataset
 ```
 
-After choosing a metric and verifying sample chronology, the dataset workload
-command requires explicit confirmation:
+The legacy workload-sequence script can be run with an explicitly selected
+numeric column, but its column meaning and units are unavailable. Treat any
+result as exploratory and do not label it as measured power, utilization, or a
+named workload. The measured thermal-map analysis below does not use telemetry
+columns. The script still requires `--assume-chronological-sample-order` as an
+explicit acknowledgement of the relative order established by overlapping
+windows; that flag does not validate the selected feature's meaning.
 
 ```bash
 python -m experiments.run_workload_sequence --metric-index INDEX --assume-chronological-sample-order
 ```
 
 Only load trusted pickle files: Python pickle deserialization can execute code.
+
+## Ryzen 7 4800U Measured Thermal-Map Analysis
+
+The measured-data experiment analyzes the actual `output` array in
+`data/raw/CPU_R7_4800U.pkl`. Its input shape is `(100, 100, 158)`: 100
+windows, each containing 100 frames and 158 telemetry columns. The output has
+100 corresponding measured thermal maps of shape `(223, 280)`. This experiment
+uses the measured output maps only; it does not feed them to the FVM or
+interpret unidentified telemetry columns.
+
+For every map, the experiment records minimum, maximum, mean, median, standard
+deviation, range, 95th and 99th percentiles, and the hottest pixel's row and
+column indices. It also summarizes pooled map temperatures and pixel-wise
+differences between consecutive stored maps. Figures show a representative
+map, maps with the highest maximum and mean temperatures, selected maps in
+stored order, and mean/maximum temperatures across all maps. The stored-map
+order is relative sequence order, not elapsed seconds; no heating rate is
+calculated.
+
+Temperatures are displayed in Celsius because that is the dataset's documented
+output unit. Hotspot positions are array row and column indices because the
+dataset does not include a verified pixel-to-die coordinate mapping. No
+physical dimensions or orientation are inferred.
+
+Run from the repository root:
+
+```bash
+python -m experiments.run_ryzen_thermal_analysis
+```
+
+The command validates the expected input and output shapes and writes
+`results/ryzen_measured/tables/measured_map_statistics.csv`,
+`results/ryzen_measured/tables/consecutive_map_changes.csv`, and PNG figures
+under `results/ryzen_measured/figures/`.
+
+The two experimental paths remain distinct:
+
+- **Measured Ryzen dataset path:** analyzes actual measured Ryzen thermal maps
+  and map-to-map differences. It does not drive the FVM with measured Ryzen
+  power and does not provide quantitative physical validation of the FVM.
+- **Synthetic simulation path:** uses generated heat-source inputs with the
+  existing FVM, CG, PCG, and Markov-based experiments. Its simulated
+  temperatures are not measured Ryzen temperatures.
 
 ## Installation and verification
 
@@ -147,7 +197,8 @@ artifacts remain under `results/figures/` and `results/tables/`; Member 1's
 demo outputs remain under `results/`. The legacy
 `results/tables/dataset_feature_statistics.csv` contains descriptive
 statistics for the supplied dataset only; it does not resolve feature
-meanings or sample chronology. The guarded real-dataset workload workflow
+meanings. Relative chronology for the supplied Ryzen windows is established by
+their adjacent-window overlap. The guarded real-dataset workload workflow
 writes to `results/real_dataset/`, which has not been generated. Saved Stage 3
 summary values are documented alongside their methodology in
 `experiments/README_stage3.md`. Timing is machine-dependent, observed
