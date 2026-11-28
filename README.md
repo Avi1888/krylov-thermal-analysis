@@ -20,6 +20,8 @@ by Member 1; the solver and workload modules are under `src/`.
 - `src/repeated_solve.py`: configurations A-D for cold/warm starts and rebuilt/
   reused Jacobi preconditioners. A changed matrix triggers a rebuild.
 - `src/benchmark.py`: benchmark summaries and optional Matplotlib plots.
+- `src/thermal_integration.py`: an `(A, b) -> vector` adapter for Member 1's
+  thermal-step callback and a relative-workload-to-W/m² power-map converter.
 
 Benchmark summaries separate solver, Jacobi setup, and validation time; the
 reported total is their sum. Timings are machine-dependent and the comparison
@@ -100,3 +102,17 @@ matrix `A` and right-hand side `b` for each time step. The solver API accepts
 dense NumPy arrays or SciPy sparse matrices. `make_spatial_heat_source()` can
 provide a normalized relative source array once the thermal grid shape and
 spatial distribution are agreed between members.
+
+For Member 1's `run_thermal_simulation(..., solver=...)` callback, use
+`ThermalSolverAdapter(method="pcg", warm_start=True,
+reuse_preconditioner=True)`. It returns the solution vector expected by that
+thermal API and retains iteration/setup diagnostics in `adapter.records`.
+Convert workload labels with `workload_states_to_power_schedule()` and pass
+an explicit `reference_power_density_w_m2`; the resulting maps match the
+assembler's surface power-density units. That scale remains illustrative until
+the team calibrates it.
+
+The dataset's output is a measured temperature map in °C, while Member 1's
+state grid uses K and the heat input uses W/m². The 223×280 measured maps are
+not power maps and should not be passed as the thermal source. Any comparison
+with the PDE output needs an explicit spatial resampling and unit conversion.

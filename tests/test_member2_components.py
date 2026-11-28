@@ -9,6 +9,7 @@ from src.krylov_solvers import solve_cg, solve_pcg, validate_spd
 from src.markov_model import estimate_markov_model
 from src.preconditioners import build_jacobi_preconditioner
 from src.repeated_solve import compare_four_configurations, run_repeated_solve
+from src.thermal_integration import ThermalSolverAdapter, workload_states_to_power_schedule
 from src.workload_preprocessing import (
     categorize_workload,
     inspect_thermal_dataset,
@@ -103,6 +104,49 @@ class WorkloadPreprocessingTests(unittest.TestCase):
     def test_missing_dataset_alignment_is_reported(self):
         data = {"input": np.ones((2, 3)), "output": np.ones((1, 2, 2))}
         self.assertFalse(inspect_thermal_dataset(data)["sample_counts_match"])
+
+
+class ThermalIntegrationTests(unittest.TestCase):
+    def test_power_schedule_has_required_w_per_square_metre_scale(self):
+        schedule = workload_states_to_power_schedule(
+            ["Low", "High"], (2, 3), 40000.0,
+            heat_levels={"Low": 0.25, "Medium": 0.5, "High": 1.0},
+        )
+        self.assertEqual([power.shape for power in schedule], [(2, 3), (2, 3)])
+        np.testing.assert_allclose(schedule[0], 10000.0)
+        np.testing.assert_allclose(schedule[1], 40000.0)
+
+    def test_power_schedule_normalizes_spatial_shape_by_mean(self):
+        schedule = workload_states_to_power_schedule(
+            ["Medium"], (2, 2), 10000.0,
+            heat_levels={"Low": 0.2, "Medium": 0.5, "High": 1.0},
+            spatial_weights=[[0.0, 1.0], [1.0, 2.0]],
+        )
+        self.assertAlmostEqual(float(schedule[0].mean()), 5000.0)
+        self.assertEqual(schedule[0][0, 0], 0.0)
+
+    def test_solver_adapter_returns_vector_and_tracks_reuse(self):
+        matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+        adapter = ThermalSolverAdapter(
+            "pcg", warm_start=True, reuse_preconditioner=True, tol=1e-11
+        )
+        first = adapter(matrix, matrix @ np.array([1.0, 2.0]))
+        second = adapter(matrix, matrix @ np.array([1.1, 2.1]))
+        self.assertIsInstance(first, np.ndarray)
+        np.testing.assert_allclose(first, [1.0, 2.0], atol=1e-10)
+        np.testing.assert_allclose(second, [1.1, 2.1], atol=1e-10)
+        self.assertTrue(adapter.records[0].preconditioner_rebuilt)
+        self.assertFalse(adapter.records[1].preconditioner_rebuilt)
+        self.assertEqual(adapter.summary["converged_steps"], 2)
+
+    def test_solver_adapter_rebuilds_after_matrix_change(self):
+        first = np.array([[4.0, 1.0], [1.0, 3.0]])
+        second = 2.0 * first
+        adapter = ThermalSolverAdapter("pcg", reuse_preconditioner=True, tol=1e-11)
+        adapter(first, first @ np.ones(2))
+        adapter(second, second @ np.ones(2))
+        self.assertTrue(adapter.records[1].matrix_changed)
+        self.assertTrue(adapter.records[1].preconditioner_rebuilt)
 
 
 if __name__ == "__main__":
